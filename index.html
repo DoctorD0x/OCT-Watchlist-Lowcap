@@ -1,0 +1,875 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Pay-Then-Act Portfolio</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Anton&family=Playfair+Display:ital,wght@0,700;1,600&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+/* Layout: a trading-floor wall. Summary strip on top, dense grid of coin "screens" below.
+   Palette: night-black ground, gold for the brand, cream for type. Candles use Binance's own up/down colors. */
+:root {
+  --bg: #07090a;
+  --panel: #0f1412;
+  --line: #22302a;
+  --cream: #f3e9d2;
+  --muted: #8a9a90;
+  --gold: #d9b04c;
+  --up: #2ebd85;
+  --down: #f6465d;
+  --display: "Anton", "Impact", sans-serif;
+  --serif: "Playfair Display", "Georgia", serif;
+  --mono: "IBM Plex Mono", ui-monospace, "SFMono-Regular", monospace;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; background: var(--bg); color: var(--cream); }
+body {
+  font: 14px/1.4 var(--mono);
+  padding-inline: 16px;
+  padding-block: 24px 48px;
+  background:
+    radial-gradient(1200px 600px at 50% -200px, rgba(217,176,76,.12), transparent 70%),
+    var(--bg);
+  min-height: 100vh;
+}
+.wrap { max-width: 1480px; margin: 0 auto; }
+
+/* ---------- Header ---------- */
+.masthead {
+  display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: 16px;
+  border-bottom: 2px solid var(--gold); padding-bottom: 14px;
+}
+.brand h1 {
+  margin: 0; font: 400 clamp(40px, 7vw, 76px)/0.9 var(--display);
+  text-transform: uppercase; letter-spacing: .02em; color: var(--cream);
+}
+.brand h1 em { font: italic 600 .5em/1 var(--serif); color: var(--gold); text-transform: none; letter-spacing: 0; margin-left: .25em; vertical-align: middle; }
+.brand p { margin: 8px 0 0; color: var(--muted); text-transform: uppercase; letter-spacing: .18em; font-size: 11px; }
+.live { display: flex; align-items: center; gap: 8px; color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: .14em; font-variant-numeric: tabular-nums; }
+.dot { width: 8px; height: 8px; border-radius: 50%; background: var(--up); box-shadow: 0 0 0 0 rgba(46,189,133,.6); animation: pulse 1.6s infinite; }
+.dot.off { background: var(--down); animation: none; }
+@keyframes pulse { 0% { box-shadow: 0 0 0 0 rgba(46,189,133,.55);} 100% { box-shadow: 0 0 0 10px rgba(46,189,133,0);} }
+
+/* ---------- Summary strip ---------- */
+.summary {
+  display: grid; grid-template-columns: 1.6fr 1fr 1fr 1fr; gap: 1px;
+  background: var(--line); border: 1px solid var(--line); margin: 20px 0;
+}
+.summary > div { background: var(--panel); padding: 16px 18px; min-width: 0; }
+.label { color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: .16em; }
+.big { font: 400 clamp(30px, 4.5vw, 52px)/1 var(--display); letter-spacing: .01em; margin-top: 8px; font-variant-numeric: tabular-nums; }
+.val { font-size: 20px; font-weight: 600; margin-top: 8px; font-variant-numeric: tabular-nums; }
+.up { color: var(--up); }
+.down { color: var(--down); }
+.hold-input {
+  width: 100%; margin-top: 8px; background: transparent; color: var(--cream);
+  border: 0; border-bottom: 1px solid var(--line); padding: 4px 0; font: 500 16px var(--mono);
+}
+.hold-input:focus { outline: none; border-bottom-color: var(--gold); }
+
+/* ---------- Toolbar ---------- */
+.toolbar { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; justify-content: space-between; margin-bottom: 14px; }
+.seg { display: flex; flex-wrap: wrap; gap: 6px; }
+.chip {
+  background: transparent; color: var(--muted); border: 1px solid var(--line);
+  padding: 6px 10px; font: 500 11px var(--mono); letter-spacing: .08em; text-transform: uppercase; cursor: pointer;
+}
+.chip[aria-pressed="true"] { color: #07090a; background: var(--gold); border-color: var(--gold); }
+.chip:focus-visible, .tile:focus-visible { outline: 2px solid var(--gold); outline-offset: 2px; }
+.tf-group { border-left: 1px solid var(--line); padding-left: 10px; }
+.search {
+  background: var(--panel); color: var(--cream); border: 1px solid var(--line);
+  padding: 8px 12px; font: 500 13px var(--mono); min-width: 0; width: min(260px, 100%);
+}
+
+/* ---------- Coin grid ---------- */
+.grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 10px; }
+.tile {
+  position: relative; background: var(--panel); border: 1px solid var(--line);
+  padding: 12px 12px 10px; min-width: 0; cursor: pointer; text-align: left; color: inherit; font: inherit;
+  transition: border-color .2s;
+}
+.tile:hover { border-color: var(--gold); }
+.tile.pinned::before {
+  content: "TOP"; position: absolute; top: -1px; right: -1px; background: var(--gold); color: #07090a;
+  font: 600 10px var(--mono); letter-spacing: .14em; padding: 3px 6px;
+}
+.tile-head { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
+.sym { font: 400 24px/1 var(--display); letter-spacing: .02em; text-transform: uppercase; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+.chg { font-weight: 600; font-size: 12px; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.price-row { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; margin: 6px 0 4px; }
+.price { font: 500 18px var(--mono); font-variant-numeric: tabular-nums; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; border-radius: 2px; }
+.price.tick-up { animation: tickUp .6s ease-out; }
+.price.tick-down { animation: tickDown .6s ease-out; }
+@keyframes tickUp { from { background: rgba(46,189,133,.28); } to { background: transparent; } }
+@keyframes tickDown { from { background: rgba(246,70,93,.28); } to { background: transparent; } }
+.rsi { font-size: 11px; color: var(--muted); white-space: nowrap; font-variant-numeric: tabular-nums; }
+.rsi b { font-weight: 600; }
+.spark { display: block; width: 100%; height: 96px; }
+.meta { display: flex; justify-content: space-between; gap: 8px; color: var(--muted); font-size: 11px; font-variant-numeric: tabular-nums; }
+.meta b { color: var(--cream); font-weight: 500; }
+
+/* ---------- Focus overlay ---------- */
+.focus {
+  position: fixed; inset: 0; background: rgba(4,6,5,.88); display: flex; align-items: center; justify-content: center;
+  padding: 16px; z-index: 10;
+}
+.focus[hidden] { display: none; }
+.focus-card { background: var(--panel); border: 1px solid var(--gold); width: min(1100px, 100%); padding: 18px; min-width: 0; }
+.focus-top { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; flex-wrap: wrap; }
+.focus-top .sym { font-size: 44px; }
+.focus-chart {
+  width: 100%; height: clamp(300px, calc(100vh - 250px), 620px); display: block; margin-top: 12px;
+  cursor: grab; touch-action: none; user-select: none;
+}
+.focus-chart:active { cursor: grabbing; }
+.focus-hint { color: var(--muted); font-size: 11px; margin-top: 8px; letter-spacing: .04em; }
+.close { background: transparent; color: var(--cream); border: 1px solid var(--line); padding: 8px 12px; font: 500 12px var(--mono); cursor: pointer; }
+.close:focus-visible { outline: 2px solid var(--gold); }
+
+footer { margin-top: 28px; color: var(--muted); font-size: 11px; letter-spacing: .06em; line-height: 1.6; }
+
+@media (max-width: 760px) {
+  .summary { grid-template-columns: 1fr 1fr; }
+  .summary > div:first-child { grid-column: 1 / -1; }
+  .tf-group { border-left: 0; padding-left: 0; }
+}
+@media (prefers-reduced-motion: reduce) { .dot, .price.tick-up, .price.tick-down { animation: none; } }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header class="masthead">
+    <div class="brand">
+      <h1>Portfolio <em>of the Street</em></h1>
+      <p>Pay-Then-Act · Binance Spot · USDT pairs</p>
+    </div>
+    <div class="live" aria-live="off">
+      <span class="dot" id="dot"></span>
+      <span id="status">Connecting…</span>
+    </div>
+  </header>
+
+  <section class="summary" aria-label="Portfolio summary">
+    <div>
+      <div class="label">Net value (USDT)</div>
+      <div class="big" id="total">$0.00</div>
+      <div class="val" id="totalChg">—</div>
+    </div>
+    <div>
+      <div class="label">Cash USDT</div>
+      <input class="hold-input" id="cash" type="number" min="0" step="any" inputmode="decimal" placeholder="0" aria-label="Cash USDT">
+      <div class="val" id="cashVal">$0.00</div>
+    </div>
+    <div>
+      <div class="label">Coins tracked</div>
+      <div class="val" id="count">0</div>
+      <div class="label" style="margin-top:8px">Holding</div>
+      <div class="val" id="holding">0</div>
+    </div>
+    <div>
+      <div class="label">Best / worst 24h</div>
+      <div class="val" id="bestworst">—</div>
+    </div>
+  </section>
+
+  <div class="toolbar">
+    <div class="seg">
+      <div class="seg" role="group" aria-label="Sort">
+        <button class="chip" data-sort="watch" aria-pressed="true">Watchlist</button>
+        <button class="chip" data-sort="gainers" aria-pressed="false">Top gainers</button>
+        <button class="chip" data-sort="losers" aria-pressed="false">Top losers</button>
+        <button class="chip" data-sort="volume" aria-pressed="false">Volume</button>
+        <button class="chip" data-sort="held" aria-pressed="false">My holdings</button>
+      </div>
+      <div class="seg tf-group" role="group" aria-label="Timeframe">
+        <button class="chip" data-tf="D1" aria-pressed="false">D1</button>
+        <button class="chip" data-tf="H4" aria-pressed="false">H4</button>
+        <button class="chip" data-tf="H1" aria-pressed="true">H1</button>
+        <button class="chip" data-tf="M15" aria-pressed="false">M15</button>
+      </div>
+    </div>
+    <input class="search" id="search" type="search" placeholder="Search coin…" aria-label="Search coin">
+  </div>
+
+  <main class="grid" id="grid"></main>
+
+  <footer>
+    Prices come from Binance's public WebSocket (ticker stream, updated every second, same source as the exchange). The forming candle updates from the kline stream.
+    RSI(14) uses Wilder smoothing on the selected timeframe. No API key needed.
+    Holdings are entered as quantities and valued in USDT. They are stored in this browser only. SPACE has no USDT spot pair, so it is not shown.
+    This is a tracking tool, not investment advice.
+  </footer>
+</div>
+
+<div class="focus" id="focus" hidden role="dialog" aria-modal="true" aria-labelledby="focusSym">
+  <div class="focus-card">
+    <div class="focus-top">
+      <div>
+        <div class="sym" id="focusSym">—</div>
+        <div class="price" id="focusPrice" style="font-size:20px;margin-top:6px">—</div>
+        <div class="meta" id="focusMeta" style="margin-top:4px"></div>
+      </div>
+      <button class="close" id="closeFocus">Close ✕</button>
+    </div>
+    <canvas class="focus-chart" id="focusChart"></canvas>
+    <div class="focus-hint">Drag to pan · scroll wheel or pinch to zoom · double-click to jump back to the latest candle</div>
+  </div>
+</div>
+
+<script>
+(() => {
+  const API = "https://api.binance.com/api/v3";
+  const WS_URL = "wss://stream.binance.com:9443/ws";
+
+  // Pinned first, then the watchlist in the order given. SPACE has no USDT spot pair, so it is left out.
+  const PINNED = ["HYPE", "ONDO", "NOT"];
+  const COINS = [
+    "BROCCOLI714","DODO","BONK","EIGEN","HOT","IO","GUN","AIXBT","BB","DYDX","AERO","BIO",
+    "LUMIA","KAIA","APE","CFX","HOME","AVNT","GALA","CHR","AXL","FOGO","HOLO","CHZ","GLMR",
+    "DOLO","EUL","GPS","GRT","HUMA","IMX","KAT","LDO","METIS","RESOLV","ROBO","BABY","ERA",
+    "BANK","MITO","MOVR","ID","PARTI","MOVE","ENA","PUMP"
+  ];
+  const ORDER = [...PINNED, ...COINS];
+  const SYMBOLS = ORDER.map(c => c + "USDT");
+  const baseOf = s => s.replace(/USDT$/, "");
+
+  // Timeframe label -> Binance kline interval.
+  const TF = { D1: "1d", H4: "4h", H1: "1h", M15: "15m" };
+  const KEEP = 500;        // candles kept per coin
+  const TILE_BARS = 48;    // candles on each grid tile
+  const RSI_N = 14;
+  const MIN_VIS = 20;      // zoom limits for the focus chart
+  const RIGHT = 3;         // empty slots kept on the right of the focus chart
+  const AXIS = 80, TIME_H = 18, GAP = 6;
+  const FONT = `11px "IBM Plex Mono", ui-monospace, monospace`;
+
+  const loadJSON = (key, fallback) => {
+    try { const v = JSON.parse(localStorage.getItem(key)); return v ?? fallback; } catch { return fallback; }
+  };
+  const save = (key, value) => { try { localStorage.setItem(key, JSON.stringify(value)); } catch {} };
+  const clamp = (v, a, b) => Math.min(b, Math.max(a, v));
+
+  // Holdings are stored as { usd, qty }: the USD you entered, and the coin quantity it converted to at that price.
+  const holdQty = b => { const h = state.holdings[b]; return h && typeof h === "object" ? h.qty || 0 : 0; };
+  const holdUsd = b => { const h = state.holdings[b]; return h && typeof h === "object" ? h.usd || 0 : 0; };
+  const fmtQty = n => n.toLocaleString("en-US", { maximumFractionDigits: 4 });
+
+  const savedTf = loadJSON("pta.tf", "H1");
+  const state = {
+    coins: Object.fromEntries(ORDER.map(b => [b, {
+      price: null, open: null, high: null, low: null, change: null, quoteVolume: null,
+      prevPrice: null, candles: [], rsi: [],
+    }])),
+    sort: "watch",
+    query: "",
+    tf: TF[savedTf] ? savedTf : "H1",
+    holdings: loadJSON("pta.holdings", {}),
+    cash: loadJSON("pta.cash", 0),
+    focus: null,
+    view: { offset: 0, vis: 120, hover: null, drag: null, pinch: null },
+    ws: null, wsOk: false, reqId: 1, lastMsg: 0,
+  };
+
+  // ---------- formatting ----------
+  const fmtUsd = (n, d) => n == null || isNaN(n) ? "—" : "$" + n.toLocaleString("en-US", { minimumFractionDigits: d ?? 2, maximumFractionDigits: d ?? 2 });
+  function fmtPrice(p) {
+    if (p == null || isNaN(p)) return "—";
+    const digits = p >= 1000 ? 2 : p >= 1 ? 4 : p >= 0.01 ? 5 : 8;
+    return "$" + p.toLocaleString("en-US", { minimumFractionDigits: digits, maximumFractionDigits: digits });
+  }
+  const fmtPct = n => n == null ? "—" : (n >= 0 ? "+" : "") + n.toFixed(2) + "%";
+  const fmtVol = n => n == null ? "—" : n >= 1e9 ? (n / 1e9).toFixed(2) + "B" : n >= 1e6 ? (n / 1e6).toFixed(2) + "M" : n >= 1e3 ? (n / 1e3).toFixed(1) + "K" : n.toFixed(0);
+  const pad2 = n => String(n).padStart(2, "0");
+  const fmtBarTime = (t, tf) => {
+    const d = new Date(t);
+    return tf === "D1" ? `${pad2(d.getDate())}/${pad2(d.getMonth() + 1)}` : `${pad2(d.getHours())}:${pad2(d.getMinutes())}`;
+  };
+
+  // ---------- indicators ----------
+  // RSI with Wilder smoothing. Returns one value per close; null until enough bars exist.
+  function rsiSeries(closes, n) {
+    const out = new Array(closes.length).fill(null);
+    if (closes.length <= n) return out;
+    let g = 0, l = 0;
+    for (let i = 1; i <= n; i++) { const d = closes[i] - closes[i - 1]; if (d > 0) g += d; else l -= d; }
+    let ag = g / n, al = l / n;
+    out[n] = al === 0 ? 100 : 100 - 100 / (1 + ag / al);
+    for (let i = n + 1; i < closes.length; i++) {
+      const d = closes[i] - closes[i - 1];
+      ag = (ag * (n - 1) + Math.max(d, 0)) / n;
+      al = (al * (n - 1) + Math.max(-d, 0)) / n;
+      out[i] = al === 0 ? 100 : 100 - 100 / (1 + ag / al);
+    }
+    return out;
+  }
+  const refreshDerived = c => { c.rsi = rsiSeries(c.candles.map(k => k.c), RSI_N); };
+  const lastRsi = c => { for (let i = c.rsi.length - 1; i >= 0; i--) if (c.rsi[i] != null) return c.rsi[i]; return null; };
+
+  // ---------- REST (baseline + history) ----------
+  const getJSON = async url => {
+    const r = await fetch(url, { cache: "no-store" });
+    if (!r.ok) throw new Error("HTTP " + r.status);
+    return r.json();
+  };
+  const symsParam = () => encodeURIComponent(JSON.stringify(SYMBOLS));
+
+  async function loadBaseline() {
+    const rows = await getJSON(`${API}/ticker/24hr?symbols=${symsParam()}`);
+    for (const t of rows) {
+      const c = state.coins[baseOf(t.symbol)];
+      if (!c) continue;
+      Object.assign(c, {
+        price: +t.lastPrice, open: +t.openPrice, high: +t.highPrice, low: +t.lowPrice,
+        change: +t.priceChangePercent, quoteVolume: +t.quoteVolume,
+      });
+    }
+  }
+
+  async function loadCandles() {
+    const tf = state.tf;
+    await Promise.all(ORDER.map(async b => {
+      try {
+        const rows = await getJSON(`${API}/klines?symbol=${b}USDT&interval=${TF[tf]}&limit=${KEEP}`);
+        if (tf !== state.tf) return;   // timeframe changed while loading
+        const c = state.coins[b];
+        c.candles = rows.map(k => ({ t: +k[0], o: +k[1], h: +k[2], l: +k[3], c: +k[4], v: +k[5] }));
+        refreshDerived(c);
+      } catch { /* keep the previous candles for this coin */ }
+    }));
+    scheduleRender();
+  }
+
+  // ---------- WebSocket (live price + forming candle, 1s ticker cadence) ----------
+  const streams = tf => SYMBOLS.flatMap(s => [s.toLowerCase() + "@ticker", s.toLowerCase() + "@kline_" + TF[tf]]);
+
+  function wsSend(method, params) {
+    const ws = state.ws;
+    if (!ws || ws.readyState !== 1 || !params.length) return;
+    ws.send(JSON.stringify({ method, params, id: state.reqId++ }));
+  }
+
+  function connectWS() {
+    let ws;
+    try { ws = new WebSocket(WS_URL); } catch { setTimeout(connectWS, 2000); return; }
+    state.ws = ws;
+    ws.onopen = () => { setWs(true); wsSend("SUBSCRIBE", streams(state.tf)); };
+    ws.onmessage = ev => { try { onEvent(JSON.parse(ev.data)); } catch { /* ignore malformed frame */ } };
+    ws.onclose = () => { setWs(false); setTimeout(connectWS, 1500); };
+    ws.onerror = () => { try { ws.close(); } catch {} };
+  }
+
+  function onEvent(m) {
+    if (m.e === "24hrTicker") {
+      const c = state.coins[baseOf(m.s)];
+      if (!c) return;
+      c.price = +m.c; c.open = +m.o; c.high = +m.h; c.low = +m.l; c.change = +m.P; c.quoteVolume = +m.q;
+      const last = c.candles[c.candles.length - 1];
+      if (last) {
+        last.c = c.price;
+        last.h = Math.max(last.h, c.price);
+        last.l = Math.min(last.l, c.price);
+        refreshDerived(c);
+      }
+    } else if (m.e === "kline") {
+      if (m.k.i !== TF[state.tf]) return;
+      const c = state.coins[baseOf(m.s)];
+      if (!c) return;
+      const k = m.k;
+      const bar = { t: k.t, o: +k.o, h: +k.h, l: +k.l, c: +k.c, v: +k.v };
+      const arr = c.candles, last = arr[arr.length - 1];
+      if (last && last.t === bar.t) {
+        arr[arr.length - 1] = bar;
+      } else if (!last || bar.t > last.t) {
+        arr.push(bar);
+        if (arr.length > KEEP) arr.shift();
+        // Keep the focus view anchored when a new candle arrives while the user is looking at history.
+        if (state.focus === baseOf(m.s) && state.view.offset > 0) state.view.offset++;
+      }
+      refreshDerived(c);
+    } else {
+      return; // subscription acks and anything else
+    }
+    state.lastMsg = Date.now();
+    scheduleRender();
+  }
+
+  // REST price fallback while the socket is down, so the grid never goes stale.
+  async function restPriceFallback() {
+    if (state.wsOk) return;
+    try {
+      const rows = await getJSON(`${API}/ticker/price?symbols=${symsParam()}`);
+      for (const t of rows) { const c = state.coins[baseOf(t.symbol)]; if (c) c.price = +t.price; }
+      scheduleRender();
+    } catch { /* try again on next tick */ }
+  }
+
+  // ---------- rendering ----------
+  let frame = 0;
+  function scheduleRender() {
+    if (!frame) frame = requestAnimationFrame(() => { frame = 0; renderAll(); });
+  }
+  function renderAll() {
+    renderTiles();
+    renderSummary();
+    if (state.focus) renderFocus();
+  }
+
+  const dot = document.getElementById("dot"), statusEl = document.getElementById("status");
+  function setWs(ok) { state.wsOk = ok; dot.classList.toggle("off", !ok); }
+  function renderClock() {
+    const t = new Date().toLocaleTimeString("en-US");
+    statusEl.textContent = (state.wsOk ? "Live · Binance WS" : "Reconnecting…") + " · " + t;
+  }
+
+  // Canvas setup shared by every chart. Returns null while the canvas has no layout yet.
+  function prep(canvas) {
+    const dpr = window.devicePixelRatio || 1;
+    const w = canvas.clientWidth, h = canvas.clientHeight;
+    if (!w || !h) return null;
+    const W = Math.round(w * dpr), H = Math.round(h * dpr);
+    if (canvas.width !== W || canvas.height !== H) { canvas.width = W; canvas.height = H; }
+    const ctx = canvas.getContext("2d");
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.clearRect(0, 0, w, h);
+    ctx.font = FONT;
+    return { ctx, w, h };
+  }
+
+  const UP = "#2ebd85", DOWN = "#f6465d", GOLD = "#d9b04c";
+  const RULE = "rgba(243,233,210,.08)", LINE = "rgba(243,233,210,.14)", TEXT = "rgba(243,233,210,.55)";
+
+  // Small tile chart: candles only, no axes.
+  function drawTile(canvas, candles) {
+    const g = prep(canvas);
+    if (!g || !candles.length) return;
+    const { ctx, w, h } = g;
+    const data = candles.slice(-TILE_BARS);
+    let lo = Infinity, hi = -Infinity;
+    for (const k of data) { lo = Math.min(lo, k.l); hi = Math.max(hi, k.h); }
+    const pad = (hi - lo) * 0.06 || hi * 0.01;
+    const top = hi + pad, bot = lo - pad;
+    const Y = v => 4 + (1 - (v - bot) / (top - bot)) * (h - 8);
+    const slot = w / data.length, body = Math.max(1, Math.min(slot * 0.7, 10));
+
+    ctx.setLineDash([3, 4]); ctx.strokeStyle = RULE; ctx.lineWidth = 1;
+    for (let i = 1; i < 4; i++) {
+      const y = Math.round(h * i / 4) + 0.5;
+      ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(w, y); ctx.stroke();
+    }
+    ctx.setLineDash([]);
+    data.forEach((k, i) => {
+      const x = (i + 0.5) * slot, col = k.c >= k.o ? UP : DOWN;
+      ctx.fillStyle = col; ctx.strokeStyle = col;
+      const xr = Math.round(x) + 0.5;
+      ctx.beginPath(); ctx.moveTo(xr, Y(k.h)); ctx.lineTo(xr, Y(k.l)); ctx.stroke();
+      const yT = Y(Math.max(k.o, k.c)), yB = Y(Math.min(k.o, k.c));
+      ctx.fillRect(Math.round(x - body / 2), Math.round(yT), Math.max(1, Math.round(body)), Math.max(1, Math.round(yB - yT)));
+    });
+  }
+
+  // Focus chart: price pane, volume pane, RSI(14) pane, with pan/zoom and crosshair.
+  function drawFocus(canvas, c, view) {
+    const g = prep(canvas);
+    if (!g) return;
+    const { ctx, w, h } = g;
+    const N = c.candles.length;
+    if (!N) { ctx.fillStyle = TEXT; ctx.fillText("Loading candles…", 12, 22); return; }
+
+    view.vis = clamp(Math.round(view.vis), Math.min(MIN_VIS, N), N);
+    view.offset = clamp(view.offset, 0, N - view.vis);
+    const end = N - view.offset, start = end - view.vis;
+    const data = c.candles.slice(start, end);
+    const rsi = c.rsi.slice(start, end);
+
+    const plotW = w - AXIS;
+    const slot = plotW / (view.vis + RIGHT);
+    const body = Math.max(1, Math.min(slot * 0.7, 18));
+    const avail = h - TIME_H;
+    const pT = 0, pB = Math.floor(avail * 0.6);
+    const vT = pB + GAP, vB = vT + Math.floor(avail * 0.14);
+    const rT = vB + GAP, rB = avail;
+    const X = i => (i + 0.5) * slot;
+
+    let lo = Infinity, hi = -Infinity, vmax = 0;
+    for (const k of data) { lo = Math.min(lo, k.l); hi = Math.max(hi, k.h); vmax = Math.max(vmax, k.v); }
+    const pad = (hi - lo) * 0.06 || hi * 0.01;
+    const top = hi + pad, bot = lo - pad;
+    const PY = v => pT + 6 + (1 - (v - bot) / (top - bot)) * (pB - pT - 12);
+    const VY = v => vB - (v / (vmax || 1)) * (vB - vT);
+    const RY = v => rT + 6 + (1 - v / 100) * (rB - rT - 12);
+    const priceAt = y => bot + (1 - (y - pT - 6) / (pB - pT - 12)) * (top - bot);
+
+    // pane separators
+    ctx.strokeStyle = LINE; ctx.lineWidth = 1;
+    for (const y of [pB + GAP / 2, vB + GAP / 2]) { ctx.beginPath(); ctx.moveTo(0, Math.round(y) + 0.5); ctx.lineTo(w, Math.round(y) + 0.5); ctx.stroke(); }
+
+    // price grid + axis
+    ctx.textBaseline = "middle"; ctx.textAlign = "left";
+    ctx.setLineDash([3, 4]); ctx.strokeStyle = RULE;
+    for (let i = 0; i <= 4; i++) {
+      const y = Math.round(PY(bot + (i / 4) * (top - bot))) + 0.5;
+      ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(plotW, y); ctx.stroke();
+      ctx.setLineDash([]); ctx.fillStyle = TEXT;
+      ctx.fillText(fmtPrice(bot + (i / 4) * (top - bot)), plotW + 8, y);
+      ctx.setLineDash([3, 4]);
+    }
+    ctx.setLineDash([]);
+
+    // candles
+    data.forEach((k, i) => {
+      const x = X(i), col = k.c >= k.o ? UP : DOWN;
+      ctx.fillStyle = col; ctx.strokeStyle = col; ctx.lineWidth = 1;
+      const xr = Math.round(x) + 0.5;
+      ctx.beginPath(); ctx.moveTo(xr, PY(k.h)); ctx.lineTo(xr, PY(k.l)); ctx.stroke();
+      const yT = PY(Math.max(k.o, k.c)), yB = PY(Math.min(k.o, k.c));
+      ctx.fillRect(Math.round(x - body / 2), Math.round(yT), Math.max(1, Math.round(body)), Math.max(1, Math.round(yB - yT)));
+    });
+
+    // last price tag
+    const last = data[data.length - 1];
+    const lastUp = last.c >= last.o;
+    const ly = Math.round(PY(last.c)) + 0.5;
+    ctx.setLineDash([2, 3]); ctx.strokeStyle = lastUp ? UP : DOWN;
+    ctx.beginPath(); ctx.moveTo(0, ly); ctx.lineTo(plotW, ly); ctx.stroke();
+    ctx.setLineDash([]);
+    tag(ctx, plotW, ly, fmtPrice(last.c), lastUp ? UP : DOWN, "#07090a");
+
+    // volume pane
+    data.forEach((k, i) => {
+      const x = X(i), y = VY(k.v);
+      ctx.globalAlpha = 0.5; ctx.fillStyle = k.c >= k.o ? UP : DOWN;
+      ctx.fillRect(Math.round(x - body / 2), Math.round(y), Math.max(1, Math.round(body)), Math.max(1, Math.round(vB - y)));
+      ctx.globalAlpha = 1;
+    });
+    ctx.fillStyle = TEXT; ctx.textAlign = "left";
+    ctx.fillText(`VOL ${fmtVol(last.v)}`, 8, vT + 8);
+
+    // RSI pane: 30 / 70 guides and the RSI line
+    ctx.setLineDash([3, 4]); ctx.strokeStyle = RULE;
+    for (const lv of [30, 70]) {
+      const y = Math.round(RY(lv)) + 0.5;
+      ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(plotW, y); ctx.stroke();
+      ctx.setLineDash([]); ctx.fillStyle = TEXT; ctx.fillText(String(lv), plotW + 8, y); ctx.setLineDash([3, 4]);
+    }
+    ctx.setLineDash([]);
+    ctx.strokeStyle = GOLD; ctx.lineWidth = 1.4; ctx.beginPath();
+    let pen = false;
+    rsi.forEach((v, i) => {
+      if (v == null) { pen = false; return; }
+      const x = X(i), y = RY(v);
+      if (!pen) { ctx.moveTo(x, y); pen = true; } else ctx.lineTo(x, y);
+    });
+    ctx.stroke();
+    const rLast = [...rsi].reverse().find(v => v != null);
+    ctx.fillStyle = TEXT; ctx.textAlign = "left";
+    ctx.fillText(`RSI(${RSI_N}) ${rLast == null ? "—" : rLast.toFixed(2)}`, 8, rT + 8);
+    if (rLast != null) tag(ctx, plotW, Math.round(RY(rLast)) + 0.5, rLast.toFixed(2), GOLD, "#07090a");
+
+    // time labels
+    ctx.fillStyle = TEXT; ctx.textBaseline = "middle";
+    const n = Math.min(6, data.length);
+    for (let j = 0; j < n; j++) {
+      const i = Math.round(j * (data.length - 1) / Math.max(1, n - 1));
+      const x = X(i);
+      ctx.textAlign = j === 0 ? "left" : j === n - 1 ? "right" : "center";
+      ctx.fillText(fmtBarTime(data[i].t, state.tf), j === 0 ? Math.max(0, x - slot / 2) : j === n - 1 ? Math.min(plotW, x + slot / 2) : x, h - TIME_H / 2);
+    }
+
+    // crosshair + OHLC readout
+    let idx = data.length - 1;
+    const hv = view.hover;
+    if (hv && hv.x >= 0 && hv.x < plotW && hv.y >= 0 && hv.y <= h) {
+      idx = clamp(Math.floor(hv.x / slot), 0, data.length - 1);
+      const cx = Math.round(X(idx)) + 0.5;
+      ctx.setLineDash([3, 3]); ctx.strokeStyle = "rgba(243,233,210,.35)";
+      ctx.beginPath(); ctx.moveTo(cx, 0); ctx.lineTo(cx, h - TIME_H); ctx.stroke();
+      if (hv.y <= pB) {
+        const cy = Math.round(hv.y) + 0.5;
+        ctx.beginPath(); ctx.moveTo(0, cy); ctx.lineTo(plotW, cy); ctx.stroke();
+        tag(ctx, plotW, cy, fmtPrice(priceAt(hv.y)), "#3a4540", TEXT_ON_TAG);
+      }
+      ctx.setLineDash([]);
+      ctx.fillStyle = "rgba(243,233,210,.9)"; ctx.textAlign = "center"; ctx.textBaseline = "middle";
+      tag(ctx, X(idx), h - TIME_H / 2, fmtBarTime(data[idx].t, state.tf), "#3a4540", TEXT_ON_TAG, true);
+      ctx.textBaseline = "middle";
+    }
+    const k = data[idx];
+    const up = k.c >= k.o;
+    const pct = (k.c - k.o) / k.o * 100;
+    ctx.textAlign = "left"; ctx.textBaseline = "middle";
+    ctx.fillStyle = up ? UP : DOWN;
+    ctx.fillText(`O ${fmtPrice(k.o)}  H ${fmtPrice(k.h)}  L ${fmtPrice(k.l)}  C ${fmtPrice(k.c)}  ${fmtPct(pct)}`, 8, pT + 10);
+    ctx.fillStyle = TEXT;
+    ctx.fillText(`VOL ${fmtVol(k.v)}`, 8, vT + 8);
+    const rv = rsi[idx];
+    ctx.fillText(`RSI(${RSI_N}) ${rv == null ? "—" : rv.toFixed(2)}`, 8, rT + 8);
+  }
+  const TEXT_ON_TAG = "#f3e9d2";
+  // Filled label on an axis or pane edge. `centered` centers the tag on x.
+  function tag(ctx, x, y, text, bg, fg, centered) {
+    const tw = ctx.measureText(text).width + 10;
+    const tx = centered ? x - tw / 2 : x;
+    ctx.fillStyle = bg;
+    ctx.fillRect(tx, y - 9, tw, 18);
+    ctx.fillStyle = fg; ctx.textAlign = "left"; ctx.textBaseline = "middle";
+    ctx.fillText(text, tx + 5, y);
+  }
+
+  function renderTiles() {
+    for (const el of document.getElementById("grid").children) {
+      const b = el.dataset.base, c = state.coins[b];
+      const priceEl = el.querySelector('[data-f="price"]');
+      if (c.price != null) {
+        const txt = fmtPrice(c.price);
+        if (priceEl.textContent !== txt) {
+          if (c.prevPrice != null && c.price !== c.prevPrice) {
+            priceEl.classList.remove("tick-up", "tick-down");
+            void priceEl.offsetWidth;
+            priceEl.classList.add(c.price > c.prevPrice ? "tick-up" : "tick-down");
+          }
+          priceEl.textContent = txt;
+        }
+        c.prevPrice = c.price;
+      }
+      const chg = el.querySelector('[data-f="chg"]');
+      chg.textContent = fmtPct(c.change);
+      chg.className = "chg " + ((c.change ?? 0) >= 0 ? "up" : "down");
+      el.querySelector('[data-f="hi"]').textContent = fmtPrice(c.high);
+      el.querySelector('[data-f="lo"]').textContent = fmtPrice(c.low);
+      el.querySelector('[data-f="vol"]').textContent = "$" + fmtVol(c.quoteVolume);
+      const q = holdQty(b);
+      el.querySelector('[data-f="value"]').innerHTML = q > 0 && c.price != null
+        ? `${fmtUsd(q * c.price)} USDT <span style="color:var(--muted)">· ${fmtQty(q)} ${b}</span>`
+        : "—";
+      const r = lastRsi(c);
+      const rEl = el.querySelector('[data-f="rsi"]');
+      rEl.innerHTML = `RSI14 <b class="${r == null ? "" : r >= 70 ? "down" : r <= 30 ? "up" : ""}">${r == null ? "—" : r.toFixed(1)}</b>`;
+      drawTile(el.querySelector('[data-f="spark"]'), c.candles);
+    }
+  }
+
+  function renderSummary() {
+    let total = 0, prevTotal = 0, held = 0, best = null, worst = null;
+    for (const b of ORDER) {
+      const c = state.coins[b];
+      if (c.price == null) continue;
+      if (c.change != null && (best == null || c.change > best.change)) best = { b, change: c.change };
+      if (c.change != null && (worst == null || c.change < worst.change)) worst = { b, change: c.change };
+      const q = holdQty(b);
+      if (q > 0) { held++; total += q * c.price; prevTotal += q * (c.open ?? c.price); }
+    }
+    const cash = +state.cash || 0;
+    total += cash; prevTotal += cash;
+    const pct = prevTotal ? ((total - prevTotal) / prevTotal) * 100 : 0;
+    document.getElementById("total").textContent = fmtUsd(total);
+    const tc = document.getElementById("totalChg");
+    tc.textContent = `${fmtPct(pct)} · ${fmtUsd(total - prevTotal)} 24h`;
+    tc.className = "val " + (pct >= 0 ? "up" : "down");
+    document.getElementById("cashVal").textContent = fmtUsd(cash);
+    document.getElementById("count").textContent = ORDER.length;
+    document.getElementById("holding").textContent = held;
+    document.getElementById("bestworst").innerHTML = best && worst
+      ? `<span class="up">${best.b} ${fmtPct(best.change)}</span><br><span class="down">${worst.b} ${fmtPct(worst.change)}</span>`
+      : "—";
+  }
+
+  // ---------- focus overlay ----------
+  const focusCanvas = document.getElementById("focusChart");
+  function openFocus(b) {
+    state.focus = b;
+    state.view = { offset: 0, vis: 120, hover: null, drag: null, pinch: null };
+    document.getElementById("focus").hidden = false;
+    document.getElementById("closeFocus").focus();
+    renderFocus();
+  }
+  function closeFocus() { state.focus = null; document.getElementById("focus").hidden = true; }
+  function renderFocus() {
+    const b = state.focus;
+    if (!b) return;
+    const c = state.coins[b];
+    const r = lastRsi(c);
+    document.getElementById("focusSym").textContent = b + "/USDT · " + state.tf;
+    document.getElementById("focusPrice").innerHTML = `${fmtPrice(c.price)} <span class="${(c.change ?? 0) >= 0 ? "up" : "down"}" style="font-size:14px">${fmtPct(c.change)}</span>`;
+    document.getElementById("focusMeta").innerHTML = `<span>H <b>${fmtPrice(c.high)}</b></span> &nbsp; <span>L <b>${fmtPrice(c.low)}</b></span> &nbsp; <span>VOL 24h <b>$${fmtVol(c.quoteVolume)}</b></span> &nbsp; <span>RSI(${RSI_N}) <b>${r == null ? "—" : r.toFixed(2)}</b></span>`;
+    drawFocus(focusCanvas, c, state.view);
+  }
+
+  // Pan, zoom and crosshair on the focus chart.
+  const maxVis = () => Math.max(MIN_VIS, state.coins[state.focus]?.candles.length || MIN_VIS);
+  const slotPx = () => (focusCanvas.clientWidth - AXIS) / (state.view.vis + RIGHT);
+  const ptrs = new Map();
+
+  focusCanvas.addEventListener("pointerdown", e => {
+    focusCanvas.setPointerCapture(e.pointerId);
+    ptrs.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    const v = state.view;
+    if (ptrs.size === 1) { v.drag = { x: e.clientX, off: v.offset }; v.hover = null; }
+    if (ptrs.size === 2) {
+      const [a, b] = [...ptrs.values()];
+      v.pinch = Math.hypot(a.x - b.x, a.y - b.y) || 1;
+      v.drag = null;
+    }
+  });
+
+  focusCanvas.addEventListener("pointermove", e => {
+    const rect = focusCanvas.getBoundingClientRect();
+    const v = state.view;
+    if (ptrs.has(e.pointerId)) ptrs.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    if (ptrs.size === 2 && v.pinch) {
+      const [a, b] = [...ptrs.values()];
+      const d = Math.hypot(a.x - b.x, a.y - b.y) || 1;
+      v.vis = clamp(Math.round(v.vis * v.pinch / d), MIN_VIS, maxVis());
+      v.pinch = d;
+    } else if (ptrs.size === 1 && v.drag) {
+      v.offset = v.drag.off + Math.round((e.clientX - v.drag.x) / slotPx());
+    } else if (ptrs.size === 0) {
+      v.hover = { x: e.clientX - rect.left, y: e.clientY - rect.top };
+    }
+    scheduleRender();
+  });
+
+  const endPointer = e => {
+    ptrs.delete(e.pointerId);
+    const v = state.view;
+    if (ptrs.size === 0) { v.drag = null; v.pinch = null; }
+    else if (ptrs.size === 1) { const p = [...ptrs.values()][0]; v.drag = { x: p.x, off: v.offset }; v.pinch = null; }
+    scheduleRender();
+  };
+  focusCanvas.addEventListener("pointerup", endPointer);
+  focusCanvas.addEventListener("pointercancel", endPointer);
+  focusCanvas.addEventListener("pointerleave", () => { if (ptrs.size === 0) { state.view.hover = null; scheduleRender(); } });
+
+  focusCanvas.addEventListener("wheel", e => {
+    e.preventDefault();
+    const v = state.view;
+    v.vis = clamp(Math.round(v.vis * (e.deltaY > 0 ? 1.12 : 1 / 1.12)), MIN_VIS, maxVis());
+    scheduleRender();
+  }, { passive: false });
+
+  focusCanvas.addEventListener("dblclick", () => { state.view.offset = 0; scheduleRender(); });
+
+  // ---------- grid ----------
+  function visibleOrder() {
+    const list = ORDER.filter(b => !state.query || b.includes(state.query.toUpperCase()));
+    const ch = b => state.coins[b].change ?? -Infinity;
+    const vol = b => state.coins[b].quoteVolume ?? 0;
+    const qty = holdQty;
+    const held = b => qty(b) * (state.coins[b].price || 0);   // value in USDT
+    if (state.sort === "gainers") list.sort((a, b) => ch(b) - ch(a));
+    else if (state.sort === "losers") list.sort((a, b) => ch(a) - ch(b));
+    else if (state.sort === "volume") list.sort((a, b) => vol(b) - vol(a));
+    else if (state.sort === "held") list.sort((a, b) => held(b) - held(a));
+    // Watchlist: coins you hold go first, largest USDT value on top; the rest keep pinned + watchlist order.
+    else list.sort((a, b) => (qty(b) > 0) - (qty(a) > 0) || held(b) - held(a) || ORDER.indexOf(a) - ORDER.indexOf(b));
+    return list;
+  }
+
+  function applySort() {
+    const grid = document.getElementById("grid");
+    const tiles = new Map([...grid.children].map(el => [el.dataset.base, el]));
+    const order = visibleOrder();
+    for (const b of order) grid.appendChild(tiles.get(b));
+    for (const [b, el] of tiles) el.hidden = !order.includes(b);
+  }
+
+  function buildGrid() {
+    const grid = document.getElementById("grid");
+    grid.innerHTML = "";
+    for (const b of ORDER) {
+      const t = document.createElement("button");
+      t.className = "tile" + (PINNED.includes(b) ? " pinned" : "");
+      t.dataset.base = b;
+      t.type = "button";
+      t.innerHTML = `
+        <div class="tile-head">
+          <span class="sym">${b}</span>
+          <span class="chg" data-f="chg">—</span>
+        </div>
+        <div class="price-row">
+          <span class="price" data-f="price">—</span>
+          <span class="rsi" data-f="rsi">RSI14 —</span>
+        </div>
+        <canvas class="spark" data-f="spark" aria-hidden="true"></canvas>
+        <div class="meta">
+          <span>H <b data-f="hi">—</b></span>
+          <span>L <b data-f="lo">—</b></span>
+          <span>VOL <b data-f="vol">—</b></span>
+        </div>
+        <div class="meta" style="margin-top:8px">
+          <span>Holding value</span>
+          <b data-f="value">—</b>
+        </div>
+        <label class="meta" style="margin-top:6px;align-items:center" onclick="event.stopPropagation()">
+          <span>Amount (USD)</span>
+          <input class="hold-input" data-f="qty" type="number" min="0" step="any" inputmode="decimal" placeholder="USD" aria-label="${b} amount in USD" style="width:110px;margin:0;text-align:right">
+        </label>`;
+      t.addEventListener("click", () => openFocus(b));
+      const qty = t.querySelector('[data-f="qty"]');
+      qty.value = holdUsd(b) || "";
+      // Convert USD to coin quantity on commit (blur or Enter), at the price shown right then.
+      qty.addEventListener("change", () => {
+        const usd = parseFloat(qty.value);
+        const price = state.coins[b].price;
+        if (!(usd > 0)) delete state.holdings[b];
+        else if (price) state.holdings[b] = { usd, qty: usd / price };
+        save("pta.holdings", state.holdings);
+        applySort();
+        renderSummary();
+        scheduleRender();
+      });
+      qty.addEventListener("click", e => e.stopPropagation());
+      grid.appendChild(t);
+    }
+    applySort();
+  }
+
+  // ---------- controls ----------
+  document.querySelectorAll("[data-sort]").forEach(btn => btn.addEventListener("click", () => {
+    state.sort = btn.dataset.sort;
+    document.querySelectorAll("[data-sort]").forEach(x => x.setAttribute("aria-pressed", String(x === btn)));
+    applySort();
+  }));
+
+  function markTf() {
+    document.querySelectorAll("[data-tf]").forEach(b => b.setAttribute("aria-pressed", String(b.dataset.tf === state.tf)));
+  }
+  document.querySelectorAll("[data-tf]").forEach(btn => btn.addEventListener("click", async () => {
+    const old = TF[state.tf];
+    state.tf = btn.dataset.tf;
+    save("pta.tf", state.tf);
+    markTf();
+    wsSend("UNSUBSCRIBE", SYMBOLS.map(s => s.toLowerCase() + "@kline_" + old));
+    wsSend("SUBSCRIBE", SYMBOLS.map(s => s.toLowerCase() + "@kline_" + TF[state.tf]));
+    state.view.offset = 0;
+    await loadCandles();
+    scheduleRender();
+  }));
+
+  document.getElementById("search").addEventListener("input", e => { state.query = e.target.value.trim(); applySort(); });
+  const cashEl = document.getElementById("cash");
+  cashEl.value = state.cash || "";
+  cashEl.addEventListener("input", () => { state.cash = Math.max(0, parseFloat(cashEl.value) || 0); save("pta.cash", state.cash); scheduleRender(); });
+  document.getElementById("closeFocus").addEventListener("click", closeFocus);
+  document.getElementById("focus").addEventListener("click", e => { if (e.target.id === "focus") closeFocus(); });
+  document.addEventListener("keydown", e => { if (e.key === "Escape") closeFocus(); });
+  window.addEventListener("resize", scheduleRender);
+
+  // ---------- start ----------
+  markTf();
+  buildGrid();
+  connectWS();
+  Promise.allSettled([loadBaseline(), loadCandles()]).then(scheduleRender);
+  setInterval(renderClock, 1000);
+  setInterval(restPriceFallback, 2000);
+  setInterval(() => loadBaseline().then(scheduleRender).catch(() => {}), 60000);  // 24h stats correction
+  setInterval(() => loadCandles().catch(() => {}), 300000);                       // history re-sync
+  renderClock();
+})();
+</script>
+</body>
+</html>

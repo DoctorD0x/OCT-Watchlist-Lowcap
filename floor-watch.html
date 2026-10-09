@@ -1,0 +1,569 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Floor Watch</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Anton&family=Playfair+Display:ital,wght@0,700;1,600&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+/* Same trading-floor language as the portfolio dashboard, built around one idea: a reference
+   line for each coin's 2026 low, so distance from the floor is the first thing you see. */
+:root {
+  --bg: #07090a;
+  --panel: #0f1412;
+  --panel2: #0c110f;
+  --line: #22302a;
+  --cream: #f3e9d2;
+  --muted: #8a9a90;
+  --gold: #d9b04c;
+  --up: #2ebd85;
+  --down: #f6465d;
+  --display: "Anton", "Impact", sans-serif;
+  --serif: "Playfair Display", "Georgia", serif;
+  --mono: "IBM Plex Mono", ui-monospace, "SFMono-Regular", monospace;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; background: var(--bg); color: var(--cream); }
+body {
+  font: 14px/1.4 var(--mono);
+  padding-inline: 16px;
+  padding-block: 24px 48px;
+  background: radial-gradient(1200px 600px at 50% -200px, rgba(217,176,76,.12), transparent 70%), var(--bg);
+  min-height: 100vh;
+}
+.wrap { max-width: 1400px; margin: 0 auto; }
+
+.masthead {
+  display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: 16px;
+  border-bottom: 2px solid var(--gold); padding-bottom: 14px;
+}
+.brand h1 {
+  margin: 0; font: 400 clamp(36px, 6vw, 64px)/0.9 var(--display);
+  text-transform: uppercase; letter-spacing: .02em; color: var(--cream);
+}
+.brand h1 em { font: italic 600 .5em/1 var(--serif); color: var(--gold); text-transform: none; letter-spacing: 0; margin-left: .25em; vertical-align: middle; }
+.brand p { margin: 8px 0 0; color: var(--muted); text-transform: uppercase; letter-spacing: .16em; font-size: 11px; }
+.live { display: flex; align-items: center; gap: 8px; color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: .14em; font-variant-numeric: tabular-nums; }
+.dot { width: 8px; height: 8px; border-radius: 50%; background: var(--up); box-shadow: 0 0 0 0 rgba(46,189,133,.6); animation: pulse 1.6s infinite; }
+.dot.off { background: var(--down); animation: none; }
+@keyframes pulse { 0% { box-shadow: 0 0 0 0 rgba(46,189,133,.55);} 100% { box-shadow: 0 0 10px rgba(46,189,133,0);} }
+
+.note {
+  background: var(--panel); border: 1px solid var(--line); border-left: 3px solid var(--gold);
+  padding: 12px 14px; margin: 18px 0; color: var(--muted); font-size: 12px; line-height: 1.6;
+}
+.note b { color: var(--cream); font-weight: 600; }
+
+.toolbar { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; justify-content: space-between; margin-bottom: 14px; }
+.seg { display: flex; flex-wrap: wrap; gap: 6px; }
+.chip {
+  background: transparent; color: var(--muted); border: 1px solid var(--line);
+  padding: 6px 10px; font: 500 11px var(--mono); letter-spacing: .08em; text-transform: uppercase; cursor: pointer;
+}
+.chip[aria-pressed="true"] { color: #07090a; background: var(--gold); border-color: var(--gold); }
+.chip:focus-visible { outline: 2px solid var(--gold); outline-offset: 2px; }
+.search {
+  background: var(--panel); color: var(--cream); border: 1px solid var(--line);
+  padding: 8px 12px; font: 500 13px var(--mono); min-width: 0; width: min(240px, 100%);
+}
+
+.thead {
+  display: grid; grid-template-columns: 54px 1fr 190px 1.6fr; gap: 14px; align-items: end;
+  padding: 0 14px 8px; color: var(--muted); font-size: 10px; text-transform: uppercase; letter-spacing: .14em;
+  border-bottom: 1px solid var(--line);
+}
+.table { display: flex; flex-direction: column; gap: 1px; background: var(--line); border: 1px solid var(--line); margin-top: 1px; }
+.row {
+  display: grid; grid-template-columns: 54px 1fr 190px 1.6fr; gap: 14px; align-items: center;
+  background: var(--panel); padding: 14px;
+}
+.rank { font: 400 22px/1 var(--display); color: var(--muted); }
+.rank.p1 { color: var(--gold); }
+
+.coin .sym { font: 400 26px/1 var(--display); letter-spacing: .02em; }
+.coin .chg { font-weight: 600; font-size: 12px; margin-top: 4px; font-variant-numeric: tabular-nums; }
+.coin .lowline { color: var(--muted); font-size: 11px; margin-top: 6px; font-variant-numeric: tabular-nums; }
+.coin .lowline b { color: var(--cream); font-weight: 500; }
+.up { color: var(--up); }
+.down { color: var(--down); }
+
+.price-block { text-align: right; }
+.price {
+  font: 500 19px var(--mono); font-variant-numeric: tabular-nums; border-radius: 2px;
+  display: inline-block; white-space: nowrap;
+}
+.price.tick-up { animation: tickUp .6s ease-out; }
+.price.tick-down { animation: tickDown .6s ease-out; }
+@keyframes tickUp { from { background: rgba(46,189,133,.28); } to { background: transparent; } }
+@keyframes tickDown { from { background: rgba(246,70,93,.28); } to { background: transparent; } }
+.badge {
+  display: inline-block; margin-top: 8px; padding: 4px 9px; font: 600 12px var(--mono);
+  border-radius: 2px; font-variant-numeric: tabular-nums;
+}
+.b-floor  { background: rgba(46,189,133,.16); color: var(--up); }
+.b-near   { background: rgba(46,189,133,.1); color: var(--up); }
+.b-mid    { background: rgba(217,176,76,.16); color: var(--gold); }
+.b-high   { background: rgba(246,70,93,.14); color: var(--down); }
+
+.chart-cell { position: relative; }
+.row-chart {
+  width: 100%; height: 190px; display: block;
+  cursor: grab; touch-action: none; user-select: none;
+}
+.row-chart:active { cursor: grabbing; }
+
+footer { margin-top: 24px; color: var(--muted); font-size: 11px; letter-spacing: .04em; line-height: 1.6; }
+
+@media (max-width: 860px) {
+  .thead { display: none; }
+  .row { grid-template-columns: 1fr; }
+  .rank { display: none; }
+  .price-block { text-align: left; }
+}
+@media (prefers-reduced-motion: reduce) { .dot, .price.tick-up, .price.tick-down { animation: none; } }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header class="masthead">
+    <div class="brand">
+      <h1>Floor <em>Watch</em></h1>
+      <p>Pay-Then-Act · Binance Spot · Coins still near their 2026 low</p>
+    </div>
+    <div class="live" aria-live="off">
+      <span class="dot" id="dot"></span>
+      <span id="status">Connecting…</span>
+    </div>
+  </header>
+
+  <div class="note">
+    <b>How this list was built:</b> out of your full watchlist, these are the coins whose price is at most 50% above the lowest daily close since <b>Jan 1, 2026</b>.
+    "From low" updates live as the price moves; the low itself is fixed at the lowest D1 candle found since Jan 1, 2026, and is not necessarily the coin's all-time low.
+    This is a screening tool, not investment advice.
+  </div>
+
+  <div class="toolbar">
+    <div class="seg" role="group" aria-label="Timeframe">
+      <button class="chip" data-tf="D1" aria-pressed="true">D1</button>
+      <button class="chip" data-tf="H4" aria-pressed="false">H4</button>
+      <button class="chip" data-tf="H1" aria-pressed="false">H1</button>
+      <button class="chip" data-tf="M15" aria-pressed="false">M15</button>
+    </div>
+    <input class="search" id="search" type="search" placeholder="Search coin…" aria-label="Search coin">
+  </div>
+
+  <div class="thead">
+    <span>#</span>
+    <span>Coin</span>
+    <span>Price</span>
+    <span>Chart — drag to pan, scroll/pinch to zoom, double-click to reset</span>
+  </div>
+  <main class="table" id="table"></main>
+
+  <footer>
+    Prices and candles come straight from Binance's public data mirror (data-api.binance.vision) and the public WebSocket (wss://stream.binance.com), updated every second. No API key needed.
+    The dashed gold line on each chart marks the lowest daily close found since Jan 1, 2026. This is a tracking tool, not investment advice.
+  </footer>
+</div>
+
+<script>
+(() => {
+  const REST = "https://data-api.binance.vision/api/v3";
+  const WS_URL = "wss://stream.binance.com:9443/ws";
+  const FLOOR_START = Date.UTC(2026, 0, 1); // only candles from Jan 1, 2026 count toward the "low"
+
+  // Coins from the watchlist that are at most 50% above their lowest D1 close since Jan 1, 2026,
+  // ordered from closest-to-floor to furthest.
+  const ORDER = [
+    "HYPE","ROBO","FOGO","KAT","GUN","HOME","ERA","BB","HOLO","RESOLV","AIXBT","BANK",
+    "MITO","CHZ","CFX","DOLO","BABY","NOT","DODO","HOT","LUMIA","METIS","EIGEN","BONK"
+  ];
+  const SYMBOLS = ORDER.map(c => c + "USDT");
+  const baseOf = s => s.replace(/USDT$/, "");
+
+  const TF = { D1: "1d", H4: "4h", H1: "1h", M15: "15m" };
+  const KEEP = 500;
+  const MIN_VIS = 20, RIGHT = 3, AXIS = 78, TIME_H = 18;
+  const FONT = `11px "IBM Plex Mono", ui-monospace, monospace`;
+
+  const state = {
+    coins: Object.fromEntries(ORDER.map(b => [b, {
+      price: null, open: null, change: null, prevPrice: null,
+      candles: [], floor: null,
+      view: { offset: 0, vis: 160, hover: null, drag: null, pinch: null },
+    }])),
+    tf: "D1",
+    query: "",
+    ws: null, wsOk: false, reqId: 1,
+  };
+
+  const clamp = (v, a, b) => Math.min(b, Math.max(a, v));
+  const fmtPrice = p => {
+    if (p == null || isNaN(p)) return "—";
+    const d = p >= 1000 ? 2 : p >= 1 ? 4 : p >= 0.01 ? 5 : 8;
+    return "$" + p.toLocaleString("en-US", { minimumFractionDigits: d, maximumFractionDigits: d });
+  };
+  const fmtPct = n => n == null ? "—" : (n >= 0 ? "+" : "") + n.toFixed(1) + "%";
+  const pad2 = n => String(n).padStart(2, "0");
+  const fmtBarTime = (t, tf) => {
+    const d = new Date(t);
+    return tf === "D1" ? `${pad2(d.getDate())}/${pad2(d.getMonth() + 1)}` : `${pad2(d.getHours())}:${pad2(d.getMinutes())}`;
+  };
+  const fmtLowDate = t => {
+    const d = new Date(t);
+    return `${pad2(d.getDate())}/${pad2(d.getMonth() + 1)}/${d.getFullYear()}`;
+  };
+
+  // ---------- REST ----------
+  const getJSON = async url => {
+    const r = await fetch(url, { cache: "no-store" });
+    if (!r.ok) throw new Error("HTTP " + r.status);
+    return r.json();
+  };
+
+  async function loadFloor(b) {
+    const rows = await getJSON(`${REST}/klines?symbol=${b}USDT&interval=1d&startTime=${FLOOR_START}&limit=1000`);
+    if (!rows.length) return;
+    let low = Infinity, t = rows[0][0];
+    for (const k of rows) { const l = +k[3]; if (l < low) { low = l; t = k[0]; } }
+    state.coins[b].floor = { low, t };
+  }
+
+  async function loadCandles(b) {
+    const tf = state.tf;
+    const rows = await getJSON(`${REST}/klines?symbol=${b}USDT&interval=${TF[tf]}&limit=${KEEP}`);
+    if (tf !== state.tf) return;
+    state.coins[b].candles = rows.map(k => ({ t: +k[0], o: +k[1], h: +k[2], l: +k[3], c: +k[4], v: +k[5] }));
+  }
+
+  async function loadBaseline(b) {
+    const t = await getJSON(`${REST}/ticker/24hr?symbol=${b}USDT`);
+    const c = state.coins[b];
+    c.price = +t.lastPrice; c.open = +t.openPrice; c.change = +t.priceChangePercent;
+  }
+
+  // ---------- WebSocket ----------
+  const streams = tf => SYMBOLS.flatMap(s => [s.toLowerCase() + "@ticker", s.toLowerCase() + "@kline_" + TF[tf]]);
+  function wsSend(method, params) {
+    const ws = state.ws;
+    if (!ws || ws.readyState !== 1 || !params.length) return;
+    ws.send(JSON.stringify({ method, params, id: state.reqId++ }));
+  }
+  function connectWS() {
+    let ws;
+    try { ws = new WebSocket(WS_URL); } catch { setTimeout(connectWS, 2000); return; }
+    state.ws = ws;
+    ws.onopen = () => { setWs(true); wsSend("SUBSCRIBE", streams(state.tf)); };
+    ws.onmessage = ev => { try { onEvent(JSON.parse(ev.data)); } catch {} };
+    ws.onclose = () => { setWs(false); setTimeout(connectWS, 1500); };
+    ws.onerror = () => { try { ws.close(); } catch {} };
+  }
+  function onEvent(m) {
+    if (m.e === "24hrTicker") {
+      const c = state.coins[baseOf(m.s)]; if (!c) return;
+      c.price = +m.c; c.open = +m.o; c.change = +m.P;
+      const last = c.candles[c.candles.length - 1];
+      if (last) { last.c = c.price; last.h = Math.max(last.h, c.price); last.l = Math.min(last.l, c.price); }
+    } else if (m.e === "kline") {
+      if (m.k.i !== TF[state.tf]) return;
+      const c = state.coins[baseOf(m.s)]; if (!c) return;
+      const k = m.k, bar = { t: k.t, o: +k.o, h: +k.h, l: +k.l, c: +k.c, v: +k.v };
+      const arr = c.candles, last = arr[arr.length - 1];
+      if (last && last.t === bar.t) arr[arr.length - 1] = bar;
+      else if (!last || bar.t > last.t) {
+        arr.push(bar);
+        if (arr.length > KEEP) arr.shift();
+        if (c.view.offset > 0) c.view.offset++;
+      }
+    } else return;
+    scheduleRender();
+  }
+  async function restFallback() {
+    if (state.wsOk) return;
+    await Promise.allSettled(ORDER.map(loadBaseline));
+    scheduleRender();
+  }
+
+  // ---------- rendering ----------
+  let frame = 0;
+  function scheduleRender() { if (!frame) frame = requestAnimationFrame(() => { frame = 0; renderAll(); }); }
+
+  const dot = document.getElementById("dot"), statusEl = document.getElementById("status");
+  function setWs(ok) { state.wsOk = ok; dot.classList.toggle("off", !ok); }
+  function renderClock() {
+    const t = new Date().toLocaleTimeString("en-US");
+    statusEl.textContent = (state.wsOk ? "Live · Binance WS" : "Reconnecting…") + " · " + t;
+  }
+
+  function prep(canvas) {
+    const dpr = window.devicePixelRatio || 1;
+    const w = canvas.clientWidth, h = canvas.clientHeight;
+    if (!w || !h) return null;
+    const W = Math.round(w * dpr), H = Math.round(h * dpr);
+    if (canvas.width !== W || canvas.height !== H) { canvas.width = W; canvas.height = H; }
+    const ctx = canvas.getContext("2d");
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.clearRect(0, 0, w, h);
+    ctx.font = FONT;
+    return { ctx, w, h };
+  }
+
+  const UP = "#2ebd85", DOWN = "#f6465d", GOLD = "#d9b04c";
+  const RULE = "rgba(243,233,210,.08)", TEXT = "rgba(243,233,210,.55)";
+
+  function tag(ctx, x, y, text, bg, fg, centered) {
+    const tw = ctx.measureText(text).width + 10;
+    const tx = centered ? x - tw / 2 : x;
+    ctx.fillStyle = bg; ctx.fillRect(tx, y - 9, tw, 18);
+    ctx.fillStyle = fg; ctx.textAlign = "left"; ctx.textBaseline = "middle";
+    ctx.fillText(text, tx + 5, y);
+  }
+
+  function drawRow(canvas, c, view) {
+    const g = prep(canvas);
+    if (!g) return;
+    const { ctx, w, h } = g;
+    const N = c.candles.length;
+    if (!N) { ctx.fillStyle = TEXT; ctx.fillText("Loading candles…", 10, 20); return; }
+
+    view.vis = clamp(Math.round(view.vis), Math.min(MIN_VIS, N), N);
+    view.offset = clamp(view.offset, 0, N - view.vis);
+    const end = N - view.offset, start = end - view.vis;
+    const data = c.candles.slice(start, end);
+
+    const plotW = w - AXIS;
+    const slot = plotW / (view.vis + RIGHT);
+    const body = Math.max(1, Math.min(slot * 0.7, 16));
+    const pT = 4, pB = h - TIME_H - 2;
+    const X = i => (i + 0.5) * slot;
+
+    let lo = Infinity, hi = -Infinity;
+    for (const k of data) { lo = Math.min(lo, k.l); hi = Math.max(hi, k.h); }
+    if (c.floor) { hi = Math.max(hi, c.floor.low); lo = Math.min(lo, c.floor.low); }
+    const pad = (hi - lo) * 0.08 || hi * 0.01;
+    const top = hi + pad, bot = lo - pad;
+    const PY = v => pT + (1 - (v - bot) / (top - bot)) * (pB - pT);
+    const priceAt = y => bot + (1 - (y - pT) / (pB - pT)) * (top - bot);
+
+    // grid + axis
+    ctx.textBaseline = "middle"; ctx.textAlign = "left";
+    ctx.setLineDash([3, 4]); ctx.strokeStyle = RULE;
+    for (let i = 0; i <= 3; i++) {
+      const v = bot + (i / 3) * (top - bot);
+      const y = Math.round(PY(v)) + 0.5;
+      ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(plotW, y); ctx.stroke();
+      ctx.setLineDash([]); ctx.fillStyle = TEXT; ctx.fillText(fmtPrice(v), plotW + 8, y); ctx.setLineDash([3, 4]);
+    }
+    ctx.setLineDash([]);
+
+    // 2026 floor reference line (dashed line stays at the true price; its tag nudges away from
+    // the last-price tag when the two are close, so the labels never overlap).
+    const last = data[data.length - 1];
+    const lastUp = last.c >= last.o;
+    const ly = Math.round(PY(last.c)) + 0.5;
+    if (c.floor) {
+      const y = Math.round(PY(c.floor.low)) + 0.5;
+      ctx.setLineDash([2, 3]); ctx.strokeStyle = GOLD; ctx.lineWidth = 1;
+      ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(plotW, y); ctx.stroke();
+      ctx.setLineDash([]);
+      ctx.fillStyle = GOLD; ctx.textAlign = "left";
+      ctx.fillText(`2026 LOW  ${fmtPrice(c.floor.low)}`, 6, y - 9 < pT + 6 ? y + 11 : y - 9);
+      // Skip the right-edge low tag when it would sit on top of the last-price tag; the left-side
+      // label and the dashed line already show the value without colliding with anything.
+      if (Math.abs(y - ly) >= 20) tag(ctx, plotW, y, fmtPrice(c.floor.low), GOLD, "#07090a");
+    }
+
+    // candles
+    data.forEach((k, i) => {
+      const x = X(i), col = k.c >= k.o ? UP : DOWN;
+      ctx.fillStyle = col; ctx.strokeStyle = col; ctx.lineWidth = 1;
+      const xr = Math.round(x) + 0.5;
+      ctx.beginPath(); ctx.moveTo(xr, PY(k.h)); ctx.lineTo(xr, PY(k.l)); ctx.stroke();
+      const yT = PY(Math.max(k.o, k.c)), yB = PY(Math.min(k.o, k.c));
+      ctx.fillRect(Math.round(x - body / 2), Math.round(yT), Math.max(1, Math.round(body)), Math.max(1, Math.round(yB - yT)));
+    });
+
+    // last price tag (drawn after the floor tag so it always sits on top when they're close)
+    ctx.setLineDash([2, 3]); ctx.strokeStyle = lastUp ? UP : DOWN;
+    ctx.beginPath(); ctx.moveTo(0, ly); ctx.lineTo(plotW, ly); ctx.stroke();
+    ctx.setLineDash([]);
+    tag(ctx, plotW, ly, fmtPrice(last.c), lastUp ? UP : DOWN, "#07090a");
+
+    // time labels
+    ctx.fillStyle = TEXT; ctx.textBaseline = "middle";
+    const n = Math.min(5, data.length);
+    for (let j = 0; j < n; j++) {
+      const i = Math.round(j * (data.length - 1) / Math.max(1, n - 1));
+      const x = X(i);
+      ctx.textAlign = j === 0 ? "left" : j === n - 1 ? "right" : "center";
+      ctx.fillText(fmtBarTime(data[i].t, state.tf), j === 0 ? Math.max(0, x - slot / 2) : j === n - 1 ? Math.min(plotW, x + slot / 2) : x, h - TIME_H / 2 + 2);
+    }
+
+    // crosshair
+    const hv = view.hover;
+    if (hv && hv.x >= 0 && hv.x < plotW && hv.y >= 0 && hv.y <= pB) {
+      const idx = clamp(Math.floor(hv.x / slot), 0, data.length - 1);
+      const cx = Math.round(X(idx)) + 0.5, cy = Math.round(hv.y) + 0.5;
+      ctx.setLineDash([3, 3]); ctx.strokeStyle = "rgba(243,233,210,.35)";
+      ctx.beginPath(); ctx.moveTo(cx, 0); ctx.lineTo(cx, pB); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(0, cy); ctx.lineTo(plotW, cy); ctx.stroke();
+      ctx.setLineDash([]);
+      tag(ctx, plotW, cy, fmtPrice(priceAt(hv.y)), "#3a4540", TEXT_ON_TAG);
+      const k = data[idx];
+      ctx.fillStyle = k.c >= k.o ? UP : DOWN; ctx.textAlign = "left";
+      ctx.fillText(`${fmtBarTime(k.t, state.tf)}  O ${fmtPrice(k.o)}  H ${fmtPrice(k.h)}  L ${fmtPrice(k.l)}  C ${fmtPrice(k.c)}`, 6, pT + 10);
+    }
+  }
+  const TEXT_ON_TAG = "#f3e9d2";
+
+  function badgeClass(pct) {
+    if (pct == null) return "b-mid";
+    if (pct <= 15) return "b-floor";
+    if (pct <= 30) return "b-near";
+    if (pct <= 50) return "b-mid";
+    return "b-high";
+  }
+
+  function renderAll() {
+    for (const b of ORDER) {
+      const row = document.getElementById("row-" + b);
+      if (row.hidden) continue;
+      const c = state.coins[b];
+
+      const priceEl = row.querySelector('[data-f="price"]');
+      if (c.price != null) {
+        const txt = fmtPrice(c.price);
+        if (priceEl.textContent !== txt) {
+          if (c.prevPrice != null && c.price !== c.prevPrice) {
+            priceEl.classList.remove("tick-up", "tick-down");
+            void priceEl.offsetWidth;
+            priceEl.classList.add(c.price > c.prevPrice ? "tick-up" : "tick-down");
+          }
+          priceEl.textContent = txt;
+        }
+        c.prevPrice = c.price;
+      }
+      const chg = row.querySelector('[data-f="chg"]');
+      chg.textContent = fmtPct(c.change);
+      chg.className = "chg " + ((c.change ?? 0) >= 0 ? "up" : "down");
+
+      const badge = row.querySelector('[data-f="badge"]');
+      if (c.floor && c.price != null) {
+        const pct = (c.price - c.floor.low) / c.floor.low * 100;
+        badge.textContent = fmtPct(pct) + " from 2026 low";
+        badge.className = "badge " + badgeClass(pct);
+        row.querySelector('[data-f="low"]').innerHTML = `Low <b>${fmtPrice(c.floor.low)}</b> on ${fmtLowDate(c.floor.t)}`;
+      }
+
+      drawRow(row.querySelector('[data-f="chart"]'), c, c.view);
+    }
+  }
+
+  // ---------- table ----------
+  function buildTable() {
+    const table = document.getElementById("table");
+    ORDER.forEach((b, i) => {
+      const row = document.createElement("div");
+      row.className = "row";
+      row.id = "row-" + b;
+      row.dataset.base = b;
+      row.innerHTML = `
+        <div class="rank ${i === 0 ? "p1" : ""}">${i + 1}</div>
+        <div class="coin">
+          <div class="sym">${b}</div>
+          <div class="chg" data-f="chg">—</div>
+          <div class="lowline" data-f="low">Loading low…</div>
+        </div>
+        <div class="price-block">
+          <span class="price" data-f="price">—</span><br>
+          <span class="badge" data-f="badge">—</span>
+        </div>
+        <div class="chart-cell">
+          <canvas class="row-chart" data-f="chart"></canvas>
+        </div>`;
+      table.appendChild(row);
+
+      const canvas = row.querySelector('[data-f="chart"]');
+      const c = state.coins[b];
+      const ptrs = new Map();
+      const slotPx = () => (canvas.clientWidth - AXIS) / (c.view.vis + RIGHT);
+      const maxVis = () => Math.max(MIN_VIS, c.candles.length || MIN_VIS);
+
+      canvas.addEventListener("pointerdown", e => {
+        canvas.setPointerCapture(e.pointerId);
+        ptrs.set(e.pointerId, { x: e.clientX, y: e.clientY });
+        if (ptrs.size === 1) { c.view.drag = { x: e.clientX, off: c.view.offset }; c.view.hover = null; }
+        if (ptrs.size === 2) { const [a, b2] = [...ptrs.values()]; c.view.pinch = Math.hypot(a.x - b2.x, a.y - b2.y) || 1; c.view.drag = null; }
+      });
+      canvas.addEventListener("pointermove", e => {
+        const rect = canvas.getBoundingClientRect();
+        if (ptrs.has(e.pointerId)) ptrs.set(e.pointerId, { x: e.clientX, y: e.clientY });
+        if (ptrs.size === 2 && c.view.pinch) {
+          const [a, b2] = [...ptrs.values()];
+          const d = Math.hypot(a.x - b2.x, a.y - b2.y) || 1;
+          c.view.vis = clamp(Math.round(c.view.vis * c.view.pinch / d), MIN_VIS, maxVis());
+          c.view.pinch = d;
+        } else if (ptrs.size === 1 && c.view.drag) {
+          c.view.offset = c.view.drag.off + Math.round((e.clientX - c.view.drag.x) / slotPx());
+        } else if (ptrs.size === 0) {
+          c.view.hover = { x: e.clientX - rect.left, y: e.clientY - rect.top };
+        }
+        scheduleRender();
+      });
+      const endPointer = e => {
+        ptrs.delete(e.pointerId);
+        if (ptrs.size === 0) { c.view.drag = null; c.view.pinch = null; }
+        else if (ptrs.size === 1) { const p = [...ptrs.values()][0]; c.view.drag = { x: p.x, off: c.view.offset }; c.view.pinch = null; }
+        scheduleRender();
+      };
+      canvas.addEventListener("pointerup", endPointer);
+      canvas.addEventListener("pointercancel", endPointer);
+      canvas.addEventListener("pointerleave", () => { if (ptrs.size === 0) { c.view.hover = null; scheduleRender(); } });
+      canvas.addEventListener("wheel", e => {
+        e.preventDefault();
+        c.view.vis = clamp(Math.round(c.view.vis * (e.deltaY > 0 ? 1.12 : 1 / 1.12)), MIN_VIS, maxVis());
+        scheduleRender();
+      }, { passive: false });
+      canvas.addEventListener("dblclick", () => { c.view.offset = 0; scheduleRender(); });
+    });
+  }
+
+  function applyFilter() {
+    const q = state.query.toUpperCase();
+    for (const b of ORDER) {
+      document.getElementById("row-" + b).hidden = !(!q || b.includes(q));
+    }
+  }
+
+  document.querySelectorAll("[data-tf]").forEach(btn => btn.addEventListener("click", async () => {
+    const old = TF[state.tf];
+    state.tf = btn.dataset.tf;
+    document.querySelectorAll("[data-tf]").forEach(x => x.setAttribute("aria-pressed", String(x === btn)));
+    wsSend("UNSUBSCRIBE", SYMBOLS.map(s => s.toLowerCase() + "@kline_" + old));
+    wsSend("SUBSCRIBE", SYMBOLS.map(s => s.toLowerCase() + "@kline_" + TF[state.tf]));
+    for (const b of ORDER) state.coins[b].view.offset = 0;
+    await Promise.allSettled(ORDER.map(loadCandles));
+    scheduleRender();
+  }));
+  document.getElementById("search").addEventListener("input", e => { state.query = e.target.value.trim(); applyFilter(); });
+  window.addEventListener("resize", scheduleRender);
+
+  // ---------- start ----------
+  buildTable();
+  connectWS();
+  Promise.allSettled(ORDER.map(loadFloor));
+  Promise.allSettled(ORDER.map(loadBaseline));
+  Promise.allSettled(ORDER.map(loadCandles)).then(scheduleRender);
+  setInterval(renderClock, 1000);
+  setInterval(restFallback, 2000);
+  setInterval(() => Promise.allSettled(ORDER.map(loadBaseline)).then(scheduleRender), 60000);
+  setInterval(() => Promise.allSettled(ORDER.map(loadCandles)).then(scheduleRender), 300000);
+  renderClock();
+})();
+</script>
+</body>
+</html>
